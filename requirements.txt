@@ -1,0 +1,12 @@
+streamlit
+openai
+sqlmodel
+pydantic
+apscheduler
+akshare
+playwright
+python-dotenv
+pandas
+beautifulsoup4
+httpx
+feedparser
