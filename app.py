@@ -266,23 +266,52 @@ elif menu == "情报源 (Sources)":
         sources_df = pd.read_sql_query("SELECT id, name, type, url_or_key, category, is_active, last_fetched_at FROM sources", conn)
         conn.close()
         st.dataframe(sources_df, use_container_width=True, hide_index=True)
-        if st.button("🔄 立即运行全量抓取"):
-            with st.spinner("调度中..."):
-                saved, scored = orchestrator.crawl_all_active()
-                st.success(f"完成！新素材: {saved}，已评分: {scored}")
-                st.rerun()
+        
+        st.markdown("---")
+        st.subheader("🚀 定向侦察调度")
+        if not sources_df.empty:
+            source_options = ["🔄 全量抓取 (所有活动源)"] + [f"ID {row['id']}: {row['name']}" for _, row in sources_df.iterrows()]
+            selected_target = st.selectbox("选择抓取目标", source_options)
+            
+            if st.button("⚡ 立即启动侦察任务"):
+                with st.spinner("侦察兵出动中..."):
+                    if "全量抓取" in selected_target:
+                        saved, scored = orchestrator.crawl_all_active()
+                    else:
+                        sid = int(selected_target.split(":")[0].replace("ID ", ""))
+                        saved = orchestrator.fetch_source(sid)
+                        scored = orchestrator.run_scoring()
+                    st.success(f"侦察任务完成！获取新素材: {saved}，同步评分: {scored}")
+                    st.rerun()
+        else:
+            st.info("暂无活动侦察兵，请在右侧先招募。")
+
     with col2:
         st.subheader("➕ 招募新侦察兵")
         with st.form("add_source_form"):
-            s_name = st.text_input("名称")
+            s_name = st.text_input("名称 (如: 极客公园 / 某WeChat ID)")
             s_type = st.selectbox("类型", ["X (Twitter)", "RSS (Blog/Arxiv)", "WeChat (RSS)", "Akshare", "Weibo", "Agent Search (Active)"])
-            s_url = st.text_input("URL/Key")
+            s_url = st.text_input("URL/Key (RSS链接或Weibo UID)")
             s_cat = st.selectbox("默认领域", ["AI", "Economy"])
-            if st.form_submit_button("入库"):
+            if st.form_submit_button("入库并激活"):
                 conn = get_db_connection()
                 conn.execute("INSERT INTO sources (name, type, url_or_key, category) VALUES (?, ?, ?, ?)", (s_name, s_type, s_url, s_cat))
                 conn.commit()
                 conn.close()
+                st.success(f"侦察兵 {s_name} 已就位。")
+                st.rerun()
+        
+        st.markdown("---")
+        st.subheader("🗑️ 裁撤侦察兵")
+        if not sources_df.empty:
+            del_target = st.selectbox("选择要删除的侦察兵", [f"ID {row['id']}: {row['name']}" for _, row in sources_df.iterrows()], key="del_source_select")
+            if st.button("🔴 确认撤职 (物理删除)"):
+                sid = int(del_target.split(":")[0].replace("ID ", ""))
+                conn = get_db_connection()
+                conn.execute("DELETE FROM sources WHERE id = ?", (sid,))
+                conn.commit()
+                conn.close()
+                st.warning(f"侦察兵 {del_target} 已被遣散并从编制中移除。")
                 st.rerun()
 
 elif menu == "历史档案 (Archives)":
