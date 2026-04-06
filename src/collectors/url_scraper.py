@@ -1,5 +1,6 @@
 import httpx
 import re
+import zlib
 from bs4 import BeautifulSoup
 from src.utils.logger import audit_logger
 from datetime import datetime
@@ -7,8 +8,24 @@ from datetime import datetime
 class URLScraper:
     def __init__(self):
         self.headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
+
+    def compress_text(self, text):
+        """Compress text using zlib."""
+        if not text:
+            return None
+        return zlib.compress(text.encode('utf-8'))
+
+    def decompress_text(self, compressed_data):
+        """Decompress zlib compressed data."""
+        if not compressed_data:
+            return None
+        try:
+            return zlib.decompress(compressed_data).decode('utf-8')
+        except Exception as e:
+            print(f"Decompression error: {e}")
+            return None
 
     def extract_biz(self, html_content):
         """Extracts the 'biz' parameter from WeChat article HTML."""
@@ -19,83 +36,87 @@ class URLScraper:
         return None
 
     def scrape_url(self, url, ignore_filters=False):
-        """Scrapes a single URL and returns basic metadata and content preview."""
+        """Scrapes a single URL and returns basic metadata and compressed content."""
         try:
-            # We use a persistent client to handle cookies if needed for redirects
             with httpx.Client(headers=self.headers, timeout=12.0, follow_redirects=True) as client:
                 response = client.get(url)
                 response.raise_for_status()
                 
-                # Logic to handle Meta Refresh or JS-based Redirects (Common in Sogou/WeChat)
+                # V2.3: Prevent PDF binary/garbled content from entering the DB
+                content_type = response.headers.get("Content-Type", "").lower()
+                if "application/pdf" in content_type or response.text.startswith("%PDF"):
+                    audit_logger.log_action("scraping", details=f"Blocked PDF binary: {url}", status="warning")
+                    return None
+                
+                # Check for PDF-like markers in decoded text (garbled case)
+                pdf_markers = ["obj", "stream", "xref", "trailer", "startxref"]
+                if any(m in response.text[:2000] for m in pdf_markers) and "%PDF" in response.text[:500]:
+                    audit_logger.log_action("scraping", details=f"Blocked garbled PDF content: {url}", status="warning")
+                    return None
+
                 soup = BeautifulSoup(response.text, 'html.parser')
                 
-                # 1. Check for Meta Refresh
+                # Handle Meta Refresh
                 refresh = soup.find("meta", attrs={"http-equiv": "refresh"})
                 if refresh and "content" in refresh.attrs:
                     content = refresh["content"]
                     if "url=" in content.lower():
                         new_url = content.lower().split("url=")[1].strip()
-                        print(f"[*] Following Meta Refresh: {new_url}")
                         response = client.get(new_url)
                         response.raise_for_status()
                         soup = BeautifulSoup(response.text, 'html.parser')
                 
-                # 2. Check for Sogou/WeChat JS Redirect "url.replace"
+                # Handle JS Redirect
                 if "url.replace" in response.text:
                     match = re.search(r"url\.replace\(['\"]([^'\"]+)['\"]\)", response.text)
                     if match:
                         new_url = match.group(1).replace("@", "")
-                        print(f"[*] Following JS Redirect: {new_url}")
                         response = client.get(new_url)
                         response.raise_for_status()
                         soup = BeautifulSoup(response.text, 'html.parser')
 
-                # Title extraction
                 title = soup.title.string if soup.title else "Untitled"
                 biz = None
-                
-                # Check if we are now on a real WeChat page
                 current_url = str(response.url)
+
                 if "mp.weixin.qq.com" in current_url:
-                    # WeChat specific title
                     wechat_title = soup.find("meta", property="og:title")
                     if wechat_title:
                         title = wechat_title.get("content", "Untitled")
-                    
-                    # Extract biz
                     biz = self.extract_biz(response.text)
 
-                # Content extraction (Burn After Reading: only 500 chars)
-                # For WeChat, main content is in id="js_content"
+                # Extract Full Content for Deep Cold Storage
                 content_div = soup.find(id="js_content")
                 if content_div:
-                    text = content_div.get_text(separator="\n", strip=True)
+                    full_text = content_div.get_text(separator="\n", strip=True)
                 else:
-                    # Generic fallback
                     for script in soup(["script", "style"]):
                         script.decompose()
-                    text = soup.get_text(separator="\n", strip=True)
+                    full_text = soup.get_text(separator="\n", strip=True)
                 
                 if not ignore_filters:
-                    # Filtering: If content is too short or looks like a placeholder
-                    if len(text.strip()) < 50:
-                        print(f"[!] Warning: Scraped content too short ({len(text.strip())} chars) for {url}. Might be a blank page or CAPTCHA.")
+                    # V2.2: Aggressive filtering for CAPTCHAs and Junk content
+                    junk_keywords = ["搜狗搜索", "验证码", "Weixin", "用户您好，您的访问过于频繁", "Sogou", "VerifyCode", "请输入验证码", "机器人"]
+                    if len(full_text.strip()) < 100:
+                        audit_logger.log_action("scraping", details=f"Blocked short content: {title}", status="warning")
                         return None
-                    
-                    # Additional check: If title is "搜狗搜索" or similar error pages
-                    if "搜狗搜索" in title or "验证码" in title or "Weixin" == title:
-                        print(f"[!] Warning: Detected error/placeholder page title: {title}")
+                    if any(kw in title for kw in junk_keywords) or any(kw in full_text for kw in junk_keywords):
+                        audit_logger.log_action("scraping", details=f"Blocked junk content: {title}", status="warning")
+                        return None
+                    if any(x in full_text for x in ["验证码", "VerifyCode", "访问过于频繁", "机器人"]):
                         return None
 
-                preview = text[:800] # Slightly more for manual input to ensure AI has context
+                preview = full_text[:800]
+                full_text_zip = self.compress_text(full_text)
                 
-                audit_logger.log_action("scraping", details=f"Scraped URL: {url} (Final: {current_url})", status="success")
+                audit_logger.log_action("scraping", details=f"Scraped URL: {url} (Compressed: {len(full_text_zip) if full_text_zip else 0} bytes)", status="success")
                 
                 return {
-                    "title": title.strip(),
-                    "url": current_url, # Return the final URL
+                    "title": title.strip() if title else "Untitled",
+                    "url": current_url,
                     "biz": biz,
                     "raw_content_preview": preview,
+                    "full_text_zip": full_text_zip,
                     "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 }
         except Exception as e:
@@ -104,4 +125,4 @@ class URLScraper:
 
 if __name__ == "__main__":
     scraper = URLScraper()
-    print("URL Scraper ready.")
+    print("URL Scraper V2.2 ready.")

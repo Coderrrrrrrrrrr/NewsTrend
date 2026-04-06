@@ -1,9 +1,9 @@
 import os
 from openai import OpenAI
 
-api_key = "177665e4-d44d-46d9-8349-aa57049e0894"
-base_url = "https://ark.cn-beijing.volces.com/api/v3"
-model = "deepseek-v3-2-251201"
+api_key = os.getenv("LLM_API_KEY")
+base_url = os.getenv("LLM_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3")
+model = os.getenv("LLM_MODEL", "deepseek-v3-2-251201")
 
 client = OpenAI(
     base_url=base_url,

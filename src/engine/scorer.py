@@ -94,7 +94,7 @@ class AIScorer:
                 total_tokens += tokens2
         
         self._update_db(material_id, final_result)
-        audit_logger.log_action("scoring", target_id=material_id, details=f"Scored {category} item: {final_result.get('score')}", status="success", tokens_used=total_tokens)
+        audit_logger.log_action("scoring", target_id=material_id, details=f"Scored {category} item: {final_result.get('score')}", status="success", tokens_used=total_tokens, model_name=self.model)
         return final_result
 
     def _update_db(self, material_id, result):

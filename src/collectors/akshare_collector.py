@@ -16,7 +16,6 @@ class EconomyCollector:
             news_df = ak.stock_news_em(symbol="sh600519") # Example: 茅台新闻作为宏观参考
             items = []
             for i, row in news_df.head(10).iterrows():
-                # 刑部铁律：严禁存储原文全篇，仅留存前 500 字概览用于 AI 摘要
                 content = row['内容'] if '内容' in row else row['文章标题']
                 preview = content[:500]
                 items.append({
@@ -29,26 +28,6 @@ class EconomyCollector:
             audit_logger.log_action("scraping", details=f"Fetched {len(items)} macro news items", status="success")
             return items
         except Exception as e:
-            # Fallback to CCTV if EM news fails, though CCTV links are harder to get
-            print(f"EM News fetch failed: {e}, falling back to CCTV...")
-            try:
-                news_df = ak.news_cctv()
-                items = []
-                for i, row in news_df.head(5).iterrows():
-                    # Handle case where column might be missing
-                    content = row.get('content', row.get('内容', ''))
-                    items.append({
-                        'title': content[:50] + "...",
-                        'url': f"https://tv.cctv.com/lm/xwlb/index.shtml?date={row['date']}", # Link to XWLB index
-                        'raw_content_preview': content[:500],
-                        'category': 'Economy',
-                        'created_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    })
-                return items
-            except Exception as e2:
-                audit_logger.log_action("scraping", details=f"Akshare news fetch error: {e2}", status="failure")
-                return []
-        except Exception as e:
             audit_logger.log_action("scraping", details=f"Akshare news fetch error: {e}", status="failure")
             return []
 
@@ -58,18 +37,28 @@ class EconomyCollector:
         saved_count = 0
         for item in items:
             try:
+                # V2.2: Add full_text_zip, permanent_url and status
                 cursor.execute('''
-                INSERT OR IGNORE INTO materials (title, url, raw_content_preview, category, created_at)
-                VALUES (?, ?, ?, ?, ?)
-                ''', (item['title'], item['url'], item['raw_content_preview'], item['category'], item['created_at']))
+                INSERT OR IGNORE INTO materials (title, url, raw_content_preview, full_text_zip, permanent_url, category, created_at, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    item['title'], 
+                    item['url'], 
+                    item['raw_content_preview'], 
+                    item.get('full_text_zip'), 
+                    item.get('permanent_url', item['url']), 
+                    item['category'], 
+                    item['created_at'],
+                    item.get('status', 'active')
+                ))
                 if cursor.rowcount > 0:
                     saved_count += 1
+                conn.commit()
             except Exception as e:
                 pass
-        conn.commit()
         conn.close()
         return saved_count
 
 if __name__ == "__main__":
     collector = EconomyCollector()
-    print("Akshare Economy Collector ready.")
+    print("Akshare Economy Collector V2.2 ready.")

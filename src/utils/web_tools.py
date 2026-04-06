@@ -41,15 +41,23 @@ def perform_web_search(query, count=10):
                 
                 if link_tag:
                     title = link_tag.get_text(strip=True)
-                    link = link_tag.get('href')
-                    # DuckDuckGo links are often prefixed with /l/?kh=-1&uddg=...
-                    if link.startswith('/l/'):
-                        # Extract the actual URL from uddg param
+                    link = link_tag.get('href', '')
+                    
+                    # DuckDuckGo links often have prefix like //duckduckgo.com/l/?...
+                    if '/l/?' in link:
                         try:
-                            from urllib.parse import urlparse, parse_qs
-                            link = parse_qs(urlparse(link).query).get('uddg', [link])[0]
+                            from urllib.parse import urlparse, parse_qs, unquote
+                            query_params = parse_qs(urlparse(link).query)
+                            uddg = query_params.get('uddg', [])
+                            if uddg:
+                                link = unquote(uddg[0])
                         except:
                             pass
+                    
+                    if link.startswith('//'):
+                        link = 'https:' + link
+                    elif link.startswith('/'):
+                        link = 'https://duckduckgo.com' + link
                     
                     snippet = snippet_tag.get_text(strip=True) if snippet_tag else ""
                     results.append({

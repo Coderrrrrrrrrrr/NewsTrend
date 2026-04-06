@@ -42,6 +42,14 @@ class AgentSearchCollector:
                 model=self.model,
                 messages=[{"role": "user", "content": prompt}]
             )
+            tokens_used = response.usage.total_tokens if hasattr(response, 'usage') else 0
+            audit_logger.log_action(
+                "search", 
+                details=f"Heavenly Eye generated trend queries for {category}", 
+                status="success",
+                tokens_used=tokens_used,
+                model_name=self.model
+            )
             content = response.choices[0].message.content
             if "```json" in content:
                 content = content.split("```json")[1].split("```")[0].strip()
@@ -72,6 +80,7 @@ class AgentSearchCollector:
                         "title": data['title'],
                         "url": data['url'],
                         "raw_content_preview": data['raw_content_preview'],
+                        "full_text_zip": data.get('full_text_zip'),
                         "category": category,
                         "created_at": data['created_at']
                     }
@@ -88,20 +97,29 @@ class AgentSearchCollector:
         
         for item in items:
             try:
+                # V2.2: Add full_text_zip, permanent_url and status
                 cursor.execute('''
-                INSERT OR IGNORE INTO materials (title, url, raw_content_preview, category, created_at)
-                VALUES (?, ?, ?, ?, ?)
-                ''', (item['title'], item['url'], item['raw_content_preview'], item['category'], item['created_at']))
+                INSERT OR IGNORE INTO materials (title, url, raw_content_preview, full_text_zip, permanent_url, category, created_at, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    item['title'], 
+                    item['url'], 
+                    item['raw_content_preview'], 
+                    item.get('full_text_zip'), 
+                    item.get('permanent_url', item['url']), 
+                    item['category'], 
+                    item['created_at'],
+                    item.get('status', 'active')
+                ))
                 if cursor.rowcount > 0:
                     saved_count += 1
+                conn.commit()
             except Exception as e:
                 print(f"Error saving hunted item: {e}")
         
-        conn.commit()
         conn.close()
         return saved_count
 
 if __name__ == "__main__":
     collector = AgentSearchCollector()
-    items = collector.hunt_for_materials("AI")
-    print(f"Saved {collector.save_items(items)} new items.")
+    print("Agent Search Collector V2.2 ready.")
