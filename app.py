@@ -254,6 +254,35 @@ elif menu == "选题池 (Materials)":
                         else:
                             dim_data.append({"维度": dim_label, "得分": data, "判定理由": "早期数据无记录"})
                     st.table(dim_data)
+                    
+                    # --- NEW: House of Representatives (Multi-Persona Audit) ---
+                    if details_json.get('persona_audit'):
+                        st.write("#### 🏛️ 众议院多重人格审计 (Multi-Persona Audit)")
+                        p_audit = details_json['persona_audit']
+                        
+                        tabs = st.tabs(["💻 技术极客", "📈 商业策略", "📱 社交达人", "⚖️ 最终裁决"])
+                        with tabs[0]:
+                            tech = p_audit.get('tech_critique', {})
+                            st.write(f"**评分: {tech.get('score')}/5**")
+                            st.info(tech.get('comment', '无评论'))
+                        with tabs[1]:
+                            biz = p_audit.get('biz_critique', {})
+                            st.write(f"**评分: {biz.get('score')}/5**")
+                            st.info(biz.get('comment', '无评论'))
+                        with tabs[2]:
+                            soc = p_audit.get('social_critique', {})
+                            st.write(f"**评分: {soc.get('score')}/5**")
+                            st.info(soc.get('comment', '无评论'))
+                        with tabs[3]:
+                            verdict = p_audit.get('final_verdict', {})
+                            st.write(f"**推荐投入: {verdict.get('recommendation')}**")
+                            st.success(f"**综合评定:** {item_dict['score']}")
+                            
+                    # --- NEW: Imperial Workshop (Visual Prompt) ---
+                    if details_json.get('visual_prompt'):
+                        st.write("#### 🎨 造办处视觉预制 (Visual Prompt)")
+                        st.code(details_json['visual_prompt'], language="text")
+                        st.caption("复制以上提示词至 Midjourney/DALL-E 3 生成配图")
                 
                 with col2:
                     st.write("#### ✅ 核心亮点 (Plus)")
@@ -318,8 +347,8 @@ elif menu == "情报源 (Sources)":
         st.subheader("➕ 招募新侦察兵")
         with st.form("add_source_form"):
             source_name = st.text_input("名称 (例如：数字生命卡兹克)")
-            source_type = st.selectbox("类型", ["X (Twitter)", "RSS (Blog/Arxiv)", "WeChat (RSS)", "Akshare", "Weibo"])
-            source_url = st.text_input("URL/Key (Weibo请填UID)")
+            source_type = st.selectbox("类型", ["X (Twitter)", "RSS (Blog/Arxiv)", "WeChat (RSS)", "Akshare", "Weibo", "Agent Search (Active)"])
+            source_url = st.text_input("URL/Key (Weibo填UID; Search填关键词或留空)")
             source_cat = st.selectbox("默认领域", ["AI", "Economy"])
             if st.form_submit_button("入库"):
                 conn = get_db_connection()

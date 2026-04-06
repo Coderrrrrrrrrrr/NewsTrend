@@ -10,6 +10,7 @@ from src.utils.logger import audit_logger
 from src.collectors.sogou_scraper import SogouWeChatScraper
 from src.engine.formatter import OmniFormatter
 from src.collectors.weibo_collector import WeiboCollector
+from src.collectors.agent_search import AgentSearchCollector
 
 class IntelligenceOrchestrator:
     def __init__(self, db_path="data/news_trend.db"):
@@ -17,6 +18,7 @@ class IntelligenceOrchestrator:
         self.rss_collector = RSSCollector(db_path)
         self.econ_collector = EconomyCollector(db_path)
         self.weibo_collector = WeiboCollector(db_path)
+        self.agent_search_collector = AgentSearchCollector(db_path)
         self.url_scraper = URLScraper()
         self.sogou_scraper = SogouWeChatScraper()
         self.scorer = AIScorer(db_path)
@@ -180,6 +182,10 @@ class IntelligenceOrchestrator:
             elif 'akshare' in stype_lower:
                 print(f"[{datetime.now()}] [Node 2.6] 执行宏观经济数据同步 (Akshare): {name}")
                 items = self.econ_collector.fetch_macro_news()
+            elif 'search' in stype_lower:
+                # Active Search Agent
+                print(f"[{datetime.now()}] [Node 2.7] 执行“天眼”全网主动探测: {name}")
+                items = self.agent_search_collector.hunt_for_materials(category)
             else:
                 print(f"[!] Unsupported source type: {stype}")
                 audit_logger.log_action("scraping", target_id=source_id, details=f"Unsupported source type: {stype}", status="warning")
