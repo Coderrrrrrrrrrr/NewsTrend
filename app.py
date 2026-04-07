@@ -309,11 +309,10 @@ elif menu == "情报源 (Sources)":
         st.markdown("---")
         st.subheader("📡 X (Twitter) 潜龙采样")
         
-        # V2.4: UI Settings for Standalone Pulse
+        # V2.5.6: Simplified Standalone Pulse (No CDP/Diagnostic)
         default_kws = "AI Agents autonomous 2026, Superintelligence Sam Altman, 2026 Tech Job Market Rebound, NVIDIA Blackwell chips AI training, DeepSeek-V3 vs OpenAI o1"
         target_kws = st.text_area("采样趋势关键词 (逗号分隔)", value=default_kws, help="设置本地采样时要重点巡弋的话题关键词。")
         show_browser_ui = st.checkbox("显示浏览器界面 (可见模式)", value=True, help="勾选后，采样过程中会弹出浏览器窗口，您可以亲眼看到抓取流程。")
-        use_cdp_mode = st.checkbox("启用 CDP 接管模式 (无需关闭浏览器)", value=False, help="启用后，系统将连接到您已开启调试端口的 Chrome，不再有目录占用冲突。")
         
         c_p1, c_p2 = st.columns(2)
         with c_p1:
@@ -328,37 +327,22 @@ elif menu == "情报源 (Sources)":
                     except Exception as e:
                         st.error(f"采样失败: {e}")
         with c_p2:
-            if st.button("🖥️ 启动本地独立采样", help="脱离 Agent，利用本地 Chrome 执行独立抓取。"):
-                with st.spinner("正在启动本地隐身浏览器..."):
+            if st.button("🖥️ 启动本地独立采样", help="脱离 Agent，利用项目内置的专用 Profile 执行独立抓取。"):
+                with st.spinner("正在启动本地采集引擎..."):
                     import subprocess
                     import sys
                     import os
                     try:
                         ui_flag = "--show-ui" if show_browser_ui else ""
-                        cdp_flag = "--use-cdp" if use_cdp_mode else ""
-                        cmd_args = f'--keywords "{target_kws}" {ui_flag} {cdp_flag}'
+                        cmd_args = f'--keywords "{target_kws}" {ui_flag}'
                         
                         bat_path = os.path.abspath("scripts/run_twitter_pulse.bat")
                         with open(bat_path, "w", encoding="gbk") as f:
                             f.write(f'@echo off\ntitle NewsTrend Local Twitter Pulse\necho [*] Launching Standalone Twitter Pulse via {sys.executable}\n"{sys.executable}" "scripts/standalone_twitter_pulse.py" {cmd_args}\npause\n')
                         subprocess.Popen([bat_path], creationflags=subprocess.CREATE_NEW_CONSOLE)
-                        st.info("本地采集任务已启动。请查看弹出的命令行窗口及浏览器。")
+                        st.info("本地采集任务已启动。请在弹出的浏览器窗口中完成 X 账号登录。")
                     except Exception as e:
                         st.error(f"启动失败: {e}")
-            
-            # V2.5.3: Help launcher for Chrome Debug Mode
-            if use_cdp_mode:
-                st.info("提示：启用 CDP 接管模式需要 Chrome 以调试模式启动。")
-                if st.button("🔍 诊断：尝试为我启动调试版 Chrome", help="尝试自动查找并以调试模式启动 Chrome。"):
-                    import subprocess
-                    import os
-                    bat_path = os.path.abspath("scripts/launch_debug_chrome.bat")
-                    if os.path.exists(bat_path):
-                        # Use cmd /c for more reliability in Windows
-                        subprocess.Popen(["cmd", "/c", bat_path], creationflags=subprocess.CREATE_NEW_CONSOLE)
-                        st.success("调试版 Chrome 启动窗口已弹出，请按照窗口提示操作。")
-                    else:
-                        st.error("未能找到辅助启动脚本。请手动尝试命令行启动。")
 
         st.markdown("---")
         st.subheader("🚀 定向侦察调度")

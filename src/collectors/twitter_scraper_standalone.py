@@ -20,64 +20,35 @@ class TwitterScraperStandalone:
     V2.4: Standalone Twitter Scraper using Playwright Stealth.
     Operates independently of Agent Hub tools.
     """
-    def __init__(self, user_data_dir=None, headless=False, cdp_url=None):
-        self.user_data_dir = user_data_dir or os.getenv("CHROME_USER_DATA_DIR")
+    def __init__(self, user_data_dir=None, headless=False):
+        # V2.5.6: Use a dedicated local profile within the project to avoid conflicts with system Chrome
+        project_root = os.getcwd()
+        default_profile = os.path.join(project_root, "data", "chrome_profile")
+        if not os.path.exists(default_profile):
+            os.makedirs(default_profile, exist_ok=True)
+            
+        self.user_data_dir = user_data_dir or default_profile
         self.headless = headless
-        # V2.5.2: Force 127.0.0.1 to avoid IPv6 resolution issues on Windows
-        raw_cdp = cdp_url or os.getenv("CHROME_CDP_URL")
-        self.cdp_url = raw_cdp.replace("localhost", "127.0.0.1") if raw_cdp else None
         self.collector = TwitterCollector()
 
     def scrape_trend(self, keyword, count=10):
         """
         Navigates to X, searches for keyword, and extracts tweets.
-        Supports local launch and CDP takeover.
+        Uses a project-local persistent context to avoid conflicts.
         """
         results = []
-        # Pre-flight check for CDP
-        if self.cdp_url:
-            import httpx
-            try:
-                # Check if the debugger is actually responding
-                # Use http://127.0.0.1:9222/json/version as a standard test
-                test_url = self.cdp_url.rstrip("/") + "/json/version"
-                resp = httpx.get(test_url, timeout=10.0)
-                if resp.status_code != 200:
-                    raise Exception(f"CDP server at {test_url} returned {resp.status_code}")
-                print(f"[*] Verified CDP endpoint: {test_url}")
-            except Exception as e:
-                print(f"\n[!!!] CDP CONNECTION REFUSED [!!!]")
-                print(f"原因: 未能连接到 Chrome 调试端口 {self.cdp_url}。")
-                print(f"解决步骤:")
-                print(f" 1. 彻底关闭所有 Chrome 进程 (包括任务管理器中的后台进程)。")
-                print(f" 2. 命令行运行: taskkill /F /IM chrome.exe")
-                print(f" 3. 运行命令开启调试: chrome.exe --remote-debugging-port=9222")
-                print(f" 4. 在浏览器访问 http://127.0.0.1:9222 查看是否显示 JSON 代码。")
-                print(f"错误详情: {e}")
-                return [], []
-
         with sync_playwright() as p:
+            print(f"[*] Launching browser with Profile: {self.user_data_dir}")
             try:
-                if self.cdp_url:
-                    print(f"[*] Connecting to existing browser via CDP: {self.cdp_url}")
-                    browser = p.chromium.connect_over_cdp(self.cdp_url)
-                    # For CDP, we use the first context found
-                    context = browser.contexts[0]
-                    page = context.new_page()
-                else:
-                    print(f"[*] Launching browser with User Data: {self.user_data_dir}")
-                    browser_context = p.chromium.launch_persistent_context(
-                        user_data_dir=self.user_data_dir,
-                        headless=self.headless,
-                        args=["--disable-blink-features=AutomationControlled", "--no-sandbox"]
-                    )
-                    page = browser_context.new_page()
-                    context = browser_context
-
+                browser_context = p.chromium.launch_persistent_context(
+                    user_data_dir=self.user_data_dir,
+                    headless=self.headless,
+                    args=["--disable-blink-features=AutomationControlled", "--no-sandbox"]
+                )
+                page = browser_context.new_page()
                 apply_stealth(page)
             except Exception as launch_err:
-                print(f"\n[!!!] BROWSER CONNECTION FAILED [!!!]")
-                print(f"原因: 极有可能是因为您的 Chrome 浏览器占用冲突或 CDP 未启动。")
+                print(f"\n[!!!] BROWSER LAUNCH FAILED [!!!]")
                 print(f"错误详情: {launch_err}")
                 return [], []
             
@@ -122,10 +93,11 @@ class TwitterScraperStandalone:
             except Exception as e:
                 print(f"[!] Scrape Error: {e}")
                 return [], []
-                if self.cdp_url:
-                    browser.close() # Only closes the connection/page, not the real browser
-                else:
+            finally:
+                try:
                     browser_context.close()
+                except:
+                    pass
 
 if __name__ == "__main__":
     # Test run

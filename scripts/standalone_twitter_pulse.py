@@ -15,12 +15,12 @@ from src.utils.logger import audit_logger
 
 load_dotenv()
 
-def run_pulse_sampling_standalone(keywords=None, headless=True, use_cdp=False):
+def run_pulse_sampling_standalone(keywords=None, headless=True):
     """
-    V2.5: Standalone X Intelligence Pulse Sampling.
-    Supports CDP takeover.
+    V2.5.6: Standalone X Intelligence Pulse Sampling (Simplified).
+    Always uses a project-local profile to avoid conflicts.
     """
-    audit_logger.log_action("scraping", details=f"Starting Standalone X Pulse Sampling (CDP={use_cdp})...", status="info")
+    audit_logger.log_action("scraping", details=f"Starting Standalone X Pulse Sampling...", status="info")
     
     if not keywords:
         keywords = [
@@ -31,14 +31,7 @@ def run_pulse_sampling_standalone(keywords=None, headless=True, use_cdp=False):
             "DeepSeek-V3 vs OpenAI o1"
         ]
     
-    user_data_dir = os.getenv("CHROME_USER_DATA_DIR")
-    cdp_url = os.getenv("CHROME_CDP_URL") if use_cdp else None
-    
-    if not use_cdp and not user_data_dir:
-        print("[!] ERROR: CHROME_USER_DATA_DIR not set in .env. Please configure path to your Chrome profile.")
-        return
-        
-    scraper = TwitterScraperStandalone(user_data_dir, headless=headless, cdp_url=cdp_url)
+    scraper = TwitterScraperStandalone(headless=headless)
     collector = TwitterCollector()
     orchestrator = IntelligenceOrchestrator()
     
@@ -73,11 +66,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Standalone Twitter Pulse")
     parser.add_argument("--keywords", type=str, help="Comma separated keywords")
     parser.add_argument("--show-ui", action="store_true", help="Show browser UI (non-headless)")
-    parser.add_argument("--use-cdp", action="store_true", help="Connect to existing browser via CDP")
     args = parser.parse_args()
     
     kws = None
     if args.keywords:
         kws = [k.strip() for k in args.keywords.split(",")]
         
-    run_pulse_sampling_standalone(keywords=kws, headless=not args.show_ui, use_cdp=args.use_cdp)
+    run_pulse_sampling_standalone(keywords=kws, headless=not args.show_ui)
