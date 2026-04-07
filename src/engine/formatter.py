@@ -126,7 +126,9 @@ class OmniFormatter:
             return False, str(e)
 
     def push_to_github(self, draft_id, repo_path="content/posts"):
-        """V2.2: Placeholder for GitHub Pages integration (via GitHub API)."""
+        """V2.2: Placeholder for GitHub Pages integration (via GitHub API).
+        ⚠️ 安全警告：严禁在未获得“吾皇”单次明确授权的情况下擅自自动化或执行此功能。
+        """
         # This would require GITHUB_TOKEN and repository info
         # For now, we simulate the success if tokens are not configured
         print(f"[*] Simulating GitHub Push for draft {draft_id} to {repo_path}...")

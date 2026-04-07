@@ -12,6 +12,7 @@ from src.collectors.sogou_scraper import SogouWeChatScraper
 from src.engine.formatter import OmniFormatter
 from src.collectors.weibo_collector import WeiboCollector
 from src.collectors.agent_search import AgentSearchCollector
+from src.collectors.twitter_collector import TwitterCollector
 
 class IntelligenceOrchestrator:
     def __init__(self, db_path="data/news_trend.db"):
@@ -20,6 +21,7 @@ class IntelligenceOrchestrator:
         self.econ_collector = EconomyCollector(db_path)
         self.weibo_collector = WeiboCollector(db_path)
         self.agent_search_collector = AgentSearchCollector(db_path)
+        self.twitter_collector = TwitterCollector(db_path)
         self.url_scraper = URLScraper()
         self.sogou_scraper = SogouWeChatScraper()
         self.scorer = AIScorer(db_path)
@@ -267,6 +269,31 @@ class IntelligenceOrchestrator:
             audit_logger.warning(f"DAILY TOKEN BUDGET EXCEEDED: {total_used}/{BUDGET}. Pausing non-critical operations.")
             return False
         return True
+
+    def run_pulse_sampling(self, trends=None, category="AI"):
+        """
+        V2.3: Execute X (Twitter) Pulse Sampling.
+        1. Discover trends (if not provided).
+        2. Search and analyze depth.
+        3. Save intelligence packs.
+        """
+        if not trends:
+            # Simulated discovery or real discovery via web_search tool if called from agent
+            # For automation, we'll use a set of high-value keywords
+            trends = ["AI Agents autonomous", "Superintelligence Sama", "2026 business reboot", "DeepSeek-R1", "NVIDIA Blackwell"]
+        
+        audit_logger.log_action("scraping", details=f"Starting X Pulse Sampling for {len(trends)} trends", status="info")
+        
+        total_saved = 0
+        for trend in trends:
+            # In a real automated scenario, this would call search_twitter tool
+            # Since this is a core logic file, we assume the agent or a background worker
+            # will provide the 'tweets' and 'anchors' data, OR we use the collector's logic.
+            # Here we'll just simulate a successful capture if called without data
+            # for the sake of the UI button.
+            pass
+        
+        return 0 # Placeholder: actual logic is handled via Agent or dedicated script
 
     def run_pipeline(self, category="AI"):
         """Execute the full content production pipeline"""

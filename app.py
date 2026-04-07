@@ -129,7 +129,7 @@ elif menu == "选题池 (Materials)":
     # Table of materials (Only active items for the main pool)
     conn = get_db_connection()
     materials_df = pd.read_sql_query("""
-        SELECT id, title, url, category, score, reasoning, created_at, score_details, status
+        SELECT id, title, url, category, score, reasoning, created_at, score_details, status, intelligence_context, content_summary
         FROM materials 
         WHERE status = 'active' OR status IS NULL
     """, conn)
@@ -179,9 +179,10 @@ elif menu == "选题池 (Materials)":
         
         display_df = filtered_df.copy()
         display_df['显示评分'] = display_df['动态评分'].apply(lambda x: "⏳ 研读中..." if x == -1 else str(x))
+        display_df['话题状态'] = display_df['title'].apply(lambda x: "🔥 趋势" if "X Trend:" in x else "📰 常规")
 
         st.dataframe(
-            display_df[['id', 'title', 'url', 'category', '显示评分', 'created_at']], 
+            display_df[['id', '话题状态', 'title', 'url', 'category', '显示评分', 'created_at']], 
             column_config={
                 "url": st.column_config.LinkColumn("原文链接"),
                 "显示评分": st.column_config.TextColumn("动态评分")
@@ -211,7 +212,45 @@ elif menu == "选题池 (Materials)":
                     st.text_area("本地备份正文", value=full_text, height=400, key=f"text_{selected_id}")
 
                 st.markdown(f"**情报摘要:** {item_dict.get('content_summary', '无摘要')}")
+                
+                # V2.3: Intelligence Context (X/Twitter specific)
+                if 'intelligence_context' in item_dict and item_dict['intelligence_context']:
+                    try:
+                        ctx = json.loads(item_dict['intelligence_context'])
+                        st.info("🌐 **X (Twitter) 深度情报透视**")
+                        c_tx1, c_tx2 = st.columns(2)
+                        with c_tx1:
+                            st.markdown(f"**🔭 发现路径 (Discovery):** {ctx.get('discovery', 'N/A')}")
+                        with c_tx2:
+                            st.markdown(f"**⚓ 身份锚点 (Anchors):** {', '.join(ctx.get('anchors', [])) if ctx.get('anchors') else 'None'}")
+                        
+                        with st.expander(f"📥 深度采样 (Depth - {ctx.get('depth_count', 0)} 条推文)"):
+                            for t in ctx.get('tweets', []):
+                                st.markdown("---")
+                                st.write(t.get('text', ''))
+                                st.caption(f"推文 ID: {t.get('id')} | 发布时间: {t.get('created_at')}")
+                    except Exception as e:
+                        pass
+
                 st.markdown(f"**打分理由:** {item_dict.get('reasoning', '无理由')}")
+                
+                # V2.3: Scoring Breakdown
+                if item_dict.get('score_details'):
+                    try:
+                        details = json.loads(item_dict['score_details'])
+                        st.write("#### 💎 评分维度分解 (Dimension Scores)")
+                        # Support both legacy and new score format
+                        d = details.get('details', details)
+                        cols = st.columns(5)
+                        dims = ["novelty", "utility", "resonance", "talkability", "actionability"]
+                        labels = ["新颖度", "实用性", "共鸣感", "话题性", "执行力"]
+                        for i, dim in enumerate(dims):
+                            # Handle different JSON structures
+                            val_obj = d.get(dim, 0)
+                            s_val = val_obj.get('score', 0) if isinstance(val_obj, dict) else val_obj
+                            cols[i].metric(labels[i], f"{float(s_val):.1f}")
+                    except Exception as e:
+                        pass
 
             with col2:
                 st.write("#### 🛠️ 运维操作 (Admin)")
@@ -267,6 +306,60 @@ elif menu == "情报源 (Sources)":
         conn.close()
         st.dataframe(sources_df, use_container_width=True, hide_index=True)
         
+        st.markdown("---")
+        st.subheader("📡 X (Twitter) 潜龙采样")
+        
+        # V2.4: UI Settings for Standalone Pulse
+        default_kws = "AI Agents autonomous 2026, Superintelligence Sam Altman, 2026 Tech Job Market Rebound, NVIDIA Blackwell chips AI training, DeepSeek-V3 vs OpenAI o1"
+        target_kws = st.text_area("采样趋势关键词 (逗号分隔)", value=default_kws, help="设置本地采样时要重点巡弋的话题关键词。")
+        show_browser_ui = st.checkbox("显示浏览器界面 (可见模式)", value=True, help="勾选后，采样过程中会弹出浏览器窗口，您可以亲眼看到抓取流程。")
+        use_cdp_mode = st.checkbox("启用 CDP 接管模式 (无需关闭浏览器)", value=False, help="启用后，系统将连接到您已开启调试端口的 Chrome，不再有目录占用冲突。")
+        
+        c_p1, c_p2 = st.columns(2)
+        with c_p1:
+            if st.button("⚡ 启动 Agent 云端同步", help="利用 Accio Agent 的云端搜索能力进行同步。"):
+                with st.spinner("锦衣卫正在同步云端情报..."):
+                    import subprocess
+                    import sys
+                    try:
+                        subprocess.run([sys.executable, "scripts/sync_twitter_intelligence_v2.py"], check=True)
+                        st.success("X 潜龙脉冲采样完成！")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"采样失败: {e}")
+        with c_p2:
+            if st.button("🖥️ 启动本地独立采样", help="脱离 Agent，利用本地 Chrome 执行独立抓取。"):
+                with st.spinner("正在启动本地隐身浏览器..."):
+                    import subprocess
+                    import sys
+                    import os
+                    try:
+                        ui_flag = "--show-ui" if show_browser_ui else ""
+                        cdp_flag = "--use-cdp" if use_cdp_mode else ""
+                        cmd_args = f'--keywords "{target_kws}" {ui_flag} {cdp_flag}'
+                        
+                        bat_path = os.path.abspath("scripts/run_twitter_pulse.bat")
+                        with open(bat_path, "w", encoding="gbk") as f:
+                            f.write(f'@echo off\ntitle NewsTrend Local Twitter Pulse\necho [*] Launching Standalone Twitter Pulse via {sys.executable}\n"{sys.executable}" "scripts/standalone_twitter_pulse.py" {cmd_args}\npause\n')
+                        subprocess.Popen([bat_path], creationflags=subprocess.CREATE_NEW_CONSOLE)
+                        st.info("本地采集任务已启动。请查看弹出的命令行窗口及浏览器。")
+                    except Exception as e:
+                        st.error(f"启动失败: {e}")
+            
+            # V2.5.3: Help launcher for Chrome Debug Mode
+            if use_cdp_mode:
+                st.info("提示：启用 CDP 接管模式需要 Chrome 以调试模式启动。")
+                if st.button("🔍 诊断：尝试为我启动调试版 Chrome", help="尝试自动查找并以调试模式启动 Chrome。"):
+                    import subprocess
+                    import os
+                    bat_path = os.path.abspath("scripts/launch_debug_chrome.bat")
+                    if os.path.exists(bat_path):
+                        # Use cmd /c for more reliability in Windows
+                        subprocess.Popen(["cmd", "/c", bat_path], creationflags=subprocess.CREATE_NEW_CONSOLE)
+                        st.success("调试版 Chrome 启动窗口已弹出，请按照窗口提示操作。")
+                    else:
+                        st.error("未能找到辅助启动脚本。请手动尝试命令行启动。")
+
         st.markdown("---")
         st.subheader("🚀 定向侦察调度")
         if not sources_df.empty:
@@ -422,9 +515,23 @@ elif menu == "♻️ 回收站 (Trash)":
         st.write("回收站空空如也。")
 
 elif menu == "系统设置":
-    st.header("⚙️ 系统配置与财务审计 (Hubu Audit)")
+    st.header("⚙️ 系统配置与核心法度 (System Settings)")
     
-    # Token Budget Section
+    # V2.3: X (Twitter) Pulse Sampling Mode
+    st.subheader("📡 X (Twitter) 潜龙配置 (X Intelligence Config)")
+    col_x1, col_x2 = st.columns(2)
+    with col_x1:
+        pulse_enabled = st.checkbox("开启自动脉冲采样 (Enable Pulse Sampling)", value=True, help="每 3 小时执行一次高价值话题采样。")
+        pulse_frequency = st.slider("采样频率 (分钟)", 60, 480, 180, 10)
+    with col_x2:
+        st.info("💡 **X 潜龙计划 (Pulse Sampling)**：\n基于官方 API 授权，每 2-3 小时执行一次脉冲式采样，严防封号，获取全网最‘时髦’的 AI 趋势。")
+    
+    st.markdown("#### 💎 话题“时髦值 (Fashion Score)”计算公式")
+    st.latex(r"S_{fashion} = \left[ \log(V_{1h} + 1) \cdot \frac{V_{1h}}{V_{24h} / 24} \right] \times \left( 1 + \sum W_{alpha} \right) \times e^{-\lambda \cdot T_{age}}")
+    st.caption("注：爆发因子 (Momentum) x 权势因子 (Authority) x 衰减因子 (Decay)。由工部自动计算并在选题池展示。")
+
+    st.markdown("---")
+    # Token Budget Section (Original)
     st.subheader("💰 令牌分模型预警 (Model Token Budget)")
     yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")
     current_model = os.getenv("LLM_MODEL", "deepseek-v3-2-251201")
